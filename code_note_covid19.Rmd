@@ -1,0 +1,215 @@
+---
+title: "EVOLUTION DE LA SITUATION STATISTIQUE DE LA PANDEMIE DE COVID-19  \n NOTE N°XXX DU `r toupper(format(Sys.Date()-1, '%d %b %Y'))`"
+output:
+  word_document:
+    reference_docx: modele2.docx
+---
+
+Toutes les données statistiques, utilisées dans la présente note, proviennent des sources officielles, particulièrement du Ministère de la Santé Publique (MSP) du Niger, et de l’Université Johns Hopkins (USA)
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages, echo = F, message=FALSE, warning=FALSE}
+# Chargement des packages-------------------------------------------------------
+
+  library(data.table)
+  library(dplyr)
+  library(dtplyr)
+  library(ggplot2)
+  library(openxlsx)
+  library(flextable)
+  library(officer)
+  
+#1. Importation des données sur le GitHUB de l'Université Johns Hopkins--------
+
+  date.n = Sys.Date() - 1 #Date  j-1
+  date.n_1 = date.n - 1   #Date  j-2
+  
+  
+  date.n = format(date.n, "%m-%d-%Y") 
+  date.n_1 = format(date.n_1, "%m-%d-%Y")
+  
+  url.data = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/"
+  
+  # Lien des données du jour j-1
+  url.data.n =paste0(url.data, date.n)
+  url.data.n =paste0(url.data.n, ".csv")
+  
+  # Lien des données du jour j-2
+  url.data.n_1 = paste0(url.data, date.n_1)
+  url.data.n_1 = paste0(url.data.n_1, ".csv")
+  
+  # Lecture des Données des jour j-1 et j-2 ----------------------------------------------------
+  
+  corona.n = fread(url.data.n)
+  corona.n_1 = fread(url.data.n_1)
+  
+  
+  # Situation de la pandémie par pays
+  
+  # A j-1
+   sit.pays.n = corona.n %>% 
+     group_by(Country_Region) %>%
+     summarise(Cas = sum(Confirmed),
+             Deces = sum(Deaths),
+             Gueries = sum(Recovered))
+   
+   # A j-2
+   sit.pays.n_1 = corona.n_1 %>% 
+     group_by(Country_Region) %>%
+     summarise(Cas_n_1 = sum(Confirmed),
+             Deces_n_1 = sum(Deaths),
+             Gueries_n_1 = sum(Recovered))
+   
+# Fusion des deux bases, pour étudier l'évolution de la pandémie entre le jour j-1 et le j-2
+   
+   sit_n_n_1 = sit.pays.n_1 %>% 
+     left_join(sit.pays.n, by = "Country_Region")
+   
+# Evolution des cas confirmés, des décès et des guéris
+   
+   base = sit_n_n_1 %>% 
+     mutate(d.cas = Cas - Cas_n_1,
+            d.deces = Deces - Deces_n_1,
+            d.gueri = Gueries - Gueries_n_1,
+            t.cas = d.cas / (Cas - d.cas),
+            t.deces = d.deces / (Deces - d.deces),
+            letalite = round(100 * Deces / Cas,1),
+            guerison = Gueries / Cas
+            )
+   
+# Nombre de cas dans le monde
+   
+   monde = base %>% summarise(Cas = sum(Cas),
+                              Deces = sum(Deces),
+                              Gueries = sum(Gueries),
+                              dcas = sum(d.cas),
+                              ddeces = sum(d.deces),
+                              dgueri = sum(d.gueri))
+   
+   
+    monde = monde %>% mutate( taux.letalite = Deces * 100 / Cas,
+                              taux.guerision = Gueries * 100 /Cas,
+                              taux.dcas = dcas * 100 / (Cas - dcas),
+                              taux.ddeces = ddeces * 100 / (Deces - ddeces),
+                              taux.dgueri = dgueri * 100 / (Gueries - dgueri)
+                              )
+    
+  monde = as_tibble(monde)
+    
+# Situation en Afrique ---------------------------------------------------------
+#     
+    pays_afrique = read.csv("pays_Afrique.csv", sep = ";")
+    
+    cas_afrique = base %>% inner_join(pays_afrique, 
+                                       by = c("Country_Region" = "Pays"))  %>%
+      as_tibble()
+    
+#  Situation CEDEAO-------------------------------------------------------------
+    
+    Cedeao = cas_afrique %>% filter(Country_Region %in% c("Burkina Faso", 
+                                                          "Benin", 
+                                                          "Cote d'Ivoire",
+                                                          "Cabo Verde" ,
+                                                          "Gambia", 
+                                                          "Ghana", 
+                                                          "Guinea", 
+                                                          "Guinea-Bissau",
+                                                          "Liberia", 
+                                                          "Mali", 
+                                                          "Niger", 
+                                                          "Nigeria", 
+                                                          "Sierra Leone", 
+                                                          "Senegal", 
+                                                          "Togo")) %>% 
+      as.data.frame()
+    
+#---Formatage des tableaux------------------------------------------------------ 
+formatage = function(donnee){
+  donnee %>% flextable %>%
+    autofit() %>%
+    
+    # Couleur de remplissage, police
+    
+    style(pr_t = fp_text(font.family = "Calibri"),
+          part = "all")  %>%
+    #Thème 
+    theme_zebra(odd_header = "#5D1336",
+                odd_body = "#F1BCD5") %>%
+    
+    # Format de bordures
+    
+    border_inner(border = fp_border(color="#5D1336", width = 0.1)) %>%
+    
+    border_outer(border = fp_border(color="#5D1336", width = 0.1)) %>%
+    #Décimale et séparateur de milliers 
+    
+    colformat_num(big.mark=" ", 
+                decimal.mark = ",") %>% 
+    #Interline
+    line_spacing(space = 0.5, part = "body") %>%
+    
+    color(color = "white", part = "header")
+  }  
+     
+```
+
+Dans le monde, à la date du `r format(Sys.Date()-1, "%d %B %Y")`, selon les statistiques publiées par l'Université Johns Hopkins, **`r prettyNum(monde$Cas, big.mark = " ")`** cas d'infections à la COVID-19 ont été dénombrés, dont **`r prettyNum(monde$dcas, big.mark = " ")`** nouveaux cas enregistrés entre le `r format(Sys.Date()-2, "%d")` et le `r format(Sys.Date()-1, '%d %B %Y')`, soit une augmentation de **`r prettyNum(round(monde$taux.dcas ,1), decimal.mark = ",")`%**.
+
+Dans le monde, à la date du `r format(Sys.Date()-1, '%d %B %Y')`, le nombre total de décès liés à la COVID-19 s'établit à **`r prettyNum(monde$Deces, big.mark = " ")`**, avec **`r prettyNum(monde$ddeces, big.mark = " ")`** personnes décédées entre le `r format(Sys.Date()-2, "%d")` et le `r format(Sys.Date()-1, '%d %B %Y')`, soit une hausse de **`r prettyNum(round(monde$taux.ddeces,2), decimal.mark =",")`%**.
+
+
+A l'échelle du continent africain, à la date du **`r format(Sys.Date()-1, '%d %B %Y')`**, **`r prettyNum(sum(cas_afrique$Cas), big.mark = " ")`** cas d'infections à la COVID- 19 ont été confirmés, dont **`r prettyNum(sum(cas_afrique$Deces), big.mark = " ")`** décès, soit un taux de létalité de **`r round(sum(cas_afrique$Deces) * 100 / sum(cas_afrique$Cas), 1) |> prettyNum(decimal.mark = ",")`** %. Entre le `r format(Sys.Date()-2, "%d")` et le `r format(Sys.Date()-1,'%d %B %Y')`, **`r sum(cas_afrique$Cas) - sum(cas_afrique$Cas_n_1)`** nouveaux cas ont été officiellement déclarés, soit une augmentation de **`r round( 100 * (sum(cas_afrique$Cas) - sum(cas_afrique$Cas_n_1)) / sum(cas_afrique$Cas_n_1), 1) |> prettyNum(decimal.mark = ",")`%**.
+
+Dans l'espace CEDEAO, à la date du `r format(Sys.Date()-1, '%d %B %Y')`, `r sum(Cedeao$Cas)` cas positifs à la COVID-19 ont été déclarés, dont `r sum(Cedeao$d.cas)` nouveaux enregistrés entre le `r format(Sys.Date()-2, "%d")` et le `r format(Sys.Date()-1, '%d %B %Y')`.
+
+
+```{r echo=FALSE}
+
+# Les pays ayant les plus fort taux de létalité en Afrique
+
+cas_afrique %>% 
+  
+  # Sélection des variables à afficher dans le tableau
+  select(Pays = Country_Region,
+         `Total Cas` = Cas, 
+         `Total décès` = Deces, 
+         `Taux de létalité (%)` = letalite
+  ) %>% 
+  
+  arrange(-`Taux de létalité (%)`) %>% 
+  
+  slice(1:10) %>% 
+  
+  flextable() %>%
+  autofit() %>%
+    
+  # Couleur de remplissage, police
+  style(pr_t = fp_text(font.family = "Calibri"),
+          part = "all")  %>%
+  
+  #Thème du tableau
+  theme_zebra(odd_header = "#5D1336",
+                odd_body = "#F1BCD5") %>%
+    
+  # Format de bordures
+  border_inner(border = fp_border(color="#5D1336", width = 0.1)) %>%
+    
+  border_outer(border = fp_border(color="#5D1336", width = 0.1)) %>%
+    
+  #Décimale et séparateur de milliers 
+  colformat_num(big.mark=" ", 
+                decimal.mark = ",") %>% 
+  #Interligne
+  line_spacing(space = 0.5, part = "body") %>%
+    
+  color(color = "white", part = "header") %>% 
+  
+  #Titre du tableau
+  set_caption("Les 10 premiers pays ayant les plus forts taux de létalité de la Covid19")
+
+```
+
